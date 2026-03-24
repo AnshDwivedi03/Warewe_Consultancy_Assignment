@@ -3,6 +3,7 @@
  * Made by Ansh
  */
 
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { verifyEmail } = require('./src/verifyEmail');
@@ -47,7 +48,8 @@ if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`\n🔍 Email Verification Server by Ansh`);
     console.log(`   Running on http://localhost:${PORT}`);
-    console.log(`   API Endpoint: POST /api/verify\n`);
+    console.log(`   API Endpoint: POST /api/verify`);
+    console.log(`   Abstract API: ${process.env.ABSTRACT_API_KEY ? 'Configured ✅' : 'Missing ❌'}\n`);
   });
 }
 
