@@ -178,6 +178,7 @@ function checkSmtp(mxHost, email, timeout = 10000) {
 async function verifyEmail(email) {
   const startTime = Date.now();
   const timestamp = new Date().toISOString();
+  const ABSTRACT_API_KEY = process.env.ABSTRACT_API_KEY;
 
   // Build base result
   const result = {
@@ -208,6 +209,49 @@ async function verifyEmail(email) {
     const [, domain] = trimmed.split('@');
     result.domain = domain;
 
+    // IF API KEY IS PROVIDED, USE ABSTRACT API
+    if (ABSTRACT_API_KEY) {
+      try {
+        const apiUrl = `https://emailvalidation.abstractapi.com/v1/?api_key=${ABSTRACT_API_KEY}&email=${trimmed}`;
+        const response = await fetch(apiUrl);
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error.message || 'AbstractAPI error');
+        }
+
+        // Map AbstractAPI response to our internal format
+        result.mxRecords = data.is_mx_found.value ? ['(Verified via API)'] : [];
+        
+        if (data.autocorrect && data.autocorrect !== trimmed) {
+          result.result = 'invalid';
+          result.resultcode = 6;
+          result.subresult = 'typo_detected';
+          result.didyoumean = data.autocorrect;
+        } else if (data.deliverability === 'DELIVERABLE') {
+          result.result = 'valid';
+          result.resultcode = 1;
+          result.subresult = 'mailbox_exists';
+        } else if (data.deliverability === 'UNDELIVERABLE') {
+          result.result = 'invalid';
+          result.resultcode = 6;
+          result.subresult = 'mailbox_does_not_exist';
+        } else {
+          result.result = 'unknown';
+          result.resultcode = 3;
+          result.subresult = 'unknown';
+        }
+
+        result.executiontime = (Date.now() - startTime) / 1000;
+        return result;
+      } catch (apiError) {
+        console.warn('AbstractAPI failed, falling back to manual check:', apiError.message);
+        // Fall through to manual check if API fails
+      }
+    }
+
+    // FALLBACK TO MANUAL SMTP CHECK (May fail on cloud providers)
+    
     // Step 2: Check for typos
     const suggestedDomain = checkTypo(domain);
     if (suggestedDomain) {
@@ -242,7 +286,7 @@ async function verifyEmail(email) {
       result.result = 'unknown';
       result.resultcode = 3;
       result.subresult = 'connection_error';
-      result.error = `SMTP check failed: ${smtpError.message}`;
+      result.error = `SMTP check failed: ${smtpError.message} (Note: Port 25 is often blocked on cloud hosting)`;
       result.executiontime = (Date.now() - startTime) / 1000;
       return result;
     }
