@@ -18,7 +18,8 @@ export default function EmailVerifier({ addToast }) {
     setShowJson(false); 
 
     try {
-      const response = await fetch('/api/verify', {
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      const response = await fetch(`${baseUrl}/api/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: target.trim() }),
