@@ -178,7 +178,7 @@ function checkSmtp(mxHost, email, timeout = 10000) {
 async function verifyEmail(email) {
   const startTime = Date.now();
   const timestamp = new Date().toISOString();
-  const ABSTRACT_API_KEY = process.env.ABSTRACT_API_KEY;
+  const KICKBOX_API_KEY = process.env.KICKBOX_API_KEY;
 
   // Build base result
   const result = {
@@ -209,30 +209,30 @@ async function verifyEmail(email) {
     const [, domain] = trimmed.split('@');
     result.domain = domain;
 
-    // IF API KEY IS PROVIDED, USE ABSTRACT API
-    if (ABSTRACT_API_KEY) {
+    // IF API KEY IS PROVIDED, USE KICKBOX API
+    if (KICKBOX_API_KEY) {
       try {
-        const apiUrl = `https://emailvalidation.abstractapi.com/v1/?api_key=${ABSTRACT_API_KEY}&email=${trimmed}`;
+        const apiUrl = `https://api.kickbox.com/v2/verify?email=${encodeURIComponent(trimmed)}&apikey=${KICKBOX_API_KEY}`;
         const response = await fetch(apiUrl);
         const data = await response.json();
 
-        if (data.error) {
-          throw new Error(data.error.message || 'AbstractAPI error');
+        if (data.success === false) {
+          throw new Error(data.message || 'Kickbox API error');
         }
 
-        // Map AbstractAPI response to our internal format
-        result.mxRecords = data.is_mx_found.value ? ['(Verified via API)'] : [];
+        // Map Kickbox API response to our internal format
+        result.mxRecords = ['(Verified via API)'];
         
-        if (data.autocorrect && data.autocorrect !== trimmed) {
+        if (data.did_you_mean && data.did_you_mean !== trimmed) {
           result.result = 'invalid';
           result.resultcode = 6;
           result.subresult = 'typo_detected';
-          result.didyoumean = data.autocorrect;
-        } else if (data.deliverability === 'DELIVERABLE') {
+          result.didyoumean = data.did_you_mean;
+        } else if (data.result === 'deliverable') {
           result.result = 'valid';
           result.resultcode = 1;
           result.subresult = 'mailbox_exists';
-        } else if (data.deliverability === 'UNDELIVERABLE') {
+        } else if (data.result === 'undeliverable') {
           result.result = 'invalid';
           result.resultcode = 6;
           result.subresult = 'mailbox_does_not_exist';
@@ -245,7 +245,8 @@ async function verifyEmail(email) {
         result.executiontime = (Date.now() - startTime) / 1000;
         return result;
       } catch (apiError) {
-        console.warn('AbstractAPI failed, falling back to manual check:', apiError.message);
+        console.warn('Kickbox API failed:', apiError.message);
+        result.error = `Kickbox API failed: ${apiError.message}. (Falling back to manual SMTP check)`;
         // Fall through to manual check if API fails
       }
     }
